@@ -7,6 +7,7 @@ import time
 import queue
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
+import matplotlib.pyplot as plt
 
 class BloodPressureMonitor:
     def __init__(self, root):
@@ -85,6 +86,10 @@ class BloodPressureMonitor:
         # 创建清理日志按钮
         self.clear_button = ttk.Button(self.root, text="清理日志", command=self.clear_log)
         self.clear_button.grid(row=2, column=2, padx=10, pady=10, sticky="w")
+
+        # 创建绘图按钮
+        self.plot_button = ttk.Button(self.root, text="绘图", command=self.plot_data)
+        self.plot_button.grid(row=2, column=3, padx=10, pady=10, sticky="w")
 
     def setup_layout(self):
         self.root.grid_rowconfigure(0, weight=2)  # 参数设置区域权重更大
@@ -169,6 +174,9 @@ class BloodPressureMonitor:
 
         # 保存数据到CSV文件
         self.save_to_csv()
+        
+        # 绘制数据点
+        self.plot_data()
 
     def generate_data(self):
         while not self.stop_event.is_set():
@@ -178,15 +186,38 @@ class BloodPressureMonitor:
                 if sampling_period <= 0:
                     raise ValueError("采样周期必须大于0")
 
-                diastolic_pressure = self.generate_random_value(80, 10)  # 默认均值和方差
-                systolic_pressure = self.generate_random_value(120, 15)  # 默认均值和方差
+                # 根据概率分布生成血压状态
+                rand_val = random.random()
+                if rand_val < 0.26:
+                    status = "高血压"
+                elif rand_val < 0.91:
+                    status = "正常血压"
+                else:
+                    status = "低血压"
+
+                # 根据状态生成血压值
+                if status == "高血压":
+                    systolic_pressure = random.uniform(140, 200)  # 高血压收缩压范围
+                    diastolic_pressure = random.uniform(90, 120)  # 高血压舒张压范围
+                elif status == "正常血压":
+                    systolic_pressure = random.uniform(90, 139)  # 正常血压收缩压范围
+                    diastolic_pressure = random.uniform(60, 89)  # 正常血压舒张压范围
+                else:
+                    systolic_pressure = random.uniform(70, 89)  # 低血压收缩压范围
+                    diastolic_pressure = random.uniform(40, 59)  # 低血压舒张压范围
+
+                # 调整数据点更接近 y = 2/3x
+                diastolic_pressure = systolic_pressure * 2 / 3 + random.gauss(0, 5)
+
+                # 确保生成的压力值在合理的范围内
+                systolic_pressure = max(0, systolic_pressure)
+                diastolic_pressure = max(0, diastolic_pressure)
 
                 self.diastolic_pressures.append(diastolic_pressure)
                 self.systolic_pressures.append(systolic_pressure)
                 timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
                 self.timestamps.append(timestamp)
 
-                status = self.determine_blood_pressure_status(systolic_pressure, diastolic_pressure)
                 self.statuses.append(status)  # 将状态添加到列表中
 
                 log_message = (f"时间: {timestamp} - "
@@ -247,6 +278,33 @@ class BloodPressureMonitor:
 
         df.to_csv("blood_pressure_data.csv", index=False, encoding='utf-8-sig')
         print("数据已保存到 blood_pressure_data.csv")
+
+    def plot_data(self):
+        plt.figure(figsize=(10, 6))
+
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 使用黑体
+        plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+        colors = []
+        for systolic, diastolic in zip(self.systolic_pressures, self.diastolic_pressures):
+            if systolic >= 140 or diastolic >= 90:
+                colors.append('red')  # 高血压
+            elif systolic < 90 or diastolic < 60:
+                colors.append('black')  # 低血压
+            else:
+                colors.append('blue')  # 正常血压
+        plt.scatter(self.diastolic_pressures, self.systolic_pressures, c=colors, label='生成的数据点')
+        
+        # 绘制 y = 2/3x 的基准线
+        x = range(0, 200)
+        y = [2/3 * xi for xi in x]
+        plt.plot(y, x, color='red', label='y = 2/3x')
+        plt.xlabel('收缩压')
+        plt.ylabel('舒张压')
+        plt.title('血压数据点分布')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
 if __name__ == "__main__":
     root = tk.Tk()
